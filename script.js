@@ -163,83 +163,63 @@ function displayPage() {
             input.type = 'text';
             input.name = `q${i}`;
             input.value = userAnswers[`q${i}`] || '';
-            input.addEventListener('input', saveAnswer);
-            questionElement.appendChild(input);
-        } else if (question.type === 'radio') {
-            question.options.forEach(option => {
-                const radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.name = `q${i}`;
-                radio.value = option;
-                radio.checked = userAnswers[`q${i}`] === option;
-                radio.addEventListener('click', saveAnswer);
-
-                const radioLabel = document.createElement('label');
-                radioLabel.textContent = option;
-
-                questionElement.appendChild(radio);
-                questionElement.appendChild(radioLabel);
-                questionElement.appendChild(document.createElement('br'));
+            input.addEventListener('input', (e) => {
+                userAnswers[`q${i}`] = e.target.value;
             });
-        } else if (question.type === 'checkbox') {
+            questionElement.appendChild(input);
+        } else if (['radio', 'checkbox'].includes(question.type)) {
             question.options.forEach(option => {
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.name = `q${i}`;
-                checkbox.value = option;
-                checkbox.checked = userAnswers[`q${i}`] && userAnswers[`q${i}`].includes(option);
-                checkbox.addEventListener('click', saveAnswer);
+                const input = document.createElement('input');
+                input.type = question.type;
+                input.name = `q${i}`;
+                input.value = option;
+                if(question.type === 'radio'){
+                    input.checked = userAnswers[`q${i}`] === option;
+                }else{
+                    input.checked = userAnswers[`q${i}`] && userAnswers[`q${i}`].includes(option);
+                }
+                
+                input.addEventListener('change', (e) => {
+                    if (question.type === 'radio') {
+                        userAnswers[`q${i}`] = e.target.value;
+                    } else {
+                        if (!userAnswers[`q${i}`]) userAnswers[`q${i}`] = [];
+                        if (e.target.checked) {
+                            userAnswers[`q${i}`].push(option);
+                        } else {
+                            userAnswers[`q${i}`] = userAnswers[`q${i}`].filter(opt => opt !== option);
+                        }
+                    }
+                });
 
-                const checkboxLabel = document.createElement('label');
-                checkboxLabel.textContent = option;
+                const optionLabel = document.createElement('label');
+                optionLabel.textContent = option;
 
-                questionElement.appendChild(checkbox);
-                questionElement.appendChild(checkboxLabel);
-                questionElement.appendChild(document.createElement('br'));
+                questionElement.appendChild(input);
+                questionElement.appendChild(optionLabel);
             });
         } else if (question.type === 'dropdown') {
             const select = document.createElement('select');
             select.name = `q${i}`;
             question.options.forEach(option => {
-                const selectOption = document.createElement('option');
-                selectOption.value = option;
-                selectOption.textContent = option;
-                selectOption.selected = userAnswers[`q${i}`] === option;
-                select.appendChild(selectOption);
+                const optionElement = document.createElement('option');
+                optionElement.value = option;
+                optionElement.textContent = option;
+                optionElement.selected = userAnswers[`q${i}`] === option;
+                select.appendChild(optionElement);
             });
-            select.addEventListener('change', saveAnswer);
+            select.addEventListener('change', (e) => {
+                userAnswers[`q${i}`] = e.target.value;
+            });
             questionElement.appendChild(select);
         }
 
         questionContainer.appendChild(questionElement);
     }
 
-    document.getElementById('prev-button').disabled = currentPage === 0;
-    document.getElementById('next-button').disabled = end >= questions.length;
-    document.getElementById('submit-button').style.display = end >= questions.length ? 'inline-block' : 'none';
-}
-
-function saveAnswer(event) {
-    const name = event.target.name;
-    if (event.target.type === 'checkbox') {
-        if (!userAnswers[name]) {
-            userAnswers[name] = [];
-        }
-        if (event.target.checked) {
-            userAnswers[name].push(event.target.value);
-        } else {
-            userAnswers[name] = userAnswers[name].filter(value => value !== event.target.value);
-        }
-    } else {
-        userAnswers[name] = event.target.value;
-    }
-}
-
-function nextPage() {
-    if (currentPage < Math.ceil(questions.length / 5) - 1) {
-        currentPage++;
-        displayPage();
-    }
+    document.getElementById('prev-button').style.display = currentPage === 0 ? 'none' : 'inline-block';
+    document.getElementById('next-button').style.display = end === questions.length ? 'none' : 'inline-block';
+    document.getElementById('submit-button').style.display = end === questions.length ? 'inline-block' : 'none';
 }
 
 function prevPage() {
@@ -249,32 +229,44 @@ function prevPage() {
     }
 }
 
+function nextPage() {
+    const start = currentPage * 5;
+    const end = Math.min(start + 5, questions.length);
+    if (end < questions.length) {
+        currentPage++;
+        displayPage();
+    }
+}
+
 function submitQuiz() {
     clearInterval(timer);
-
-    let score = 0;
-    let answeredQuestions = 0;
-
+    document.getElementById('prev-button').style.display = 'none';
+    document.getElementById('next-button').style.display = 'none';
+    document.getElementById('submit-button').style.display = 'none';
+    document.getElementById('retake-button').style.display = 'inline-block';
+    
+    let correctAnswersCount = 0;
     questions.forEach((question, index) => {
         const userAnswer = userAnswers[`q${index}`];
-        if (userAnswer !== undefined) {
-            answeredQuestions++;
-            if (question.type === 'text' || question.type === 'dropdown') {
-                if (userAnswer.toLowerCase() === question.answer.toLowerCase()) {
-                    score++;
-                }
-            } else if (question.type === 'radio') {
-                if (userAnswer === question.answer) {
-                    score++;
-                }
-            } else if (question.type === 'checkbox') {
-                if (JSON.stringify(userAnswer.sort()) === JSON.stringify(question.answer.sort())) {
-                    score++;
-                }
-            }
+        const correctAnswer = question.answer;
+        const isCorrect = Array.isArray(correctAnswer)
+            ? userAnswer && correctAnswer.sort().toString() === userAnswer.sort().toString()
+            : userAnswer === correctAnswer;
+
+        if (isCorrect) {
+            correctAnswersCount++;
         }
     });
 
     const timeTaken = 180 - timeRemaining;
-    alert(`Your score is ${score} out of ${answeredQuestions}.\nTime taken: ${Math.floor(timeTaken / 60)} minutes ${timeTaken % 60} seconds`);
+    alert(`You scored ${correctAnswersCount} out of ${questions.length}. Time taken: ${Math.floor(timeTaken / 60)} minutes and ${timeTaken % 60} seconds.`);
+}
+
+function retakeQuiz() {
+    currentPage = 0;
+    timeRemaining = 180;
+    userAnswers = {};
+    document.getElementById('retake-button').style.display = 'none';
+    loadQuestions();
+    startTimer();
 }
